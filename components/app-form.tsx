@@ -3,14 +3,19 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { ArrowLeft, Upload, Loader2, X } from "lucide-react";
+import { ArrowLeft, Upload, Loader2, X, Lock } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { createApp, updateApp, uploadLogo } from "@/app/actions";
 import { CATEGORIES, ACCENT_COLORS } from "@/lib/constants";
+import { encrypt } from "@/lib/crypto";
 import type { App } from "@/types";
 import type { CategoryId } from "@/lib/constants";
 import { CredentialFields } from "@/components/credential-fields";
+import {
+  getCachedMasterPassword,
+  cacheMasterPassword,
+} from "@/lib/master-password-cache";
 
 interface AppFormProps {
   app?: App;
@@ -31,9 +36,20 @@ export function AppForm({ app, userId }: AppFormProps) {
   const [credentialsEnc, setCredentialsEnc] = useState(app?.credentials_enc ?? "");
   const [credentialsIv, setCredentialsIv] = useState(app?.credentials_iv ?? "");
 
+  // Raw credential fields (not yet encrypted)
+  const [credUsername, setCredUsername] = useState("");
+  const [credPassword, setCredPassword] = useState("");
+  const [credNotes, setCredNotes] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
+
+  // Master password prompt state
+  const [showMasterPrompt, setShowMasterPrompt] = useState(false);
+  const [promptMasterPassword, setPromptMasterPassword] = useState("");
+
+  const hasRawCredentials = !!(credUsername || credPassword || credNotes);
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -59,10 +75,31 @@ export function AppForm({ app, userId }: AppFormProps) {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function doSubmit(masterPwd: string | null) {
     setLoading(true);
     setErrors({});
+
+    let encData = credentialsEnc;
+    let ivData = credentialsIv;
+
+    // Encrypt raw credentials if present
+    if (hasRawCredentials && masterPwd) {
+      try {
+        const credentials = JSON.stringify({
+          username: credUsername,
+          password: credPassword,
+          notes: credNotes,
+        });
+        const result = await encrypt(credentials, masterPwd, userId);
+        encData = result.ciphertext;
+        ivData = result.iv;
+        cacheMasterPassword(masterPwd);
+      } catch {
+        toast.error("Erro ao criptografar credenciais");
+        setLoading(false);
+        return;
+      }
+    }
 
     const input = {
       name,
@@ -72,8 +109,8 @@ export function AppForm({ app, userId }: AppFormProps) {
       icon_emoji: iconEmoji,
       logo_url: logoUrl,
       color,
-      credentials_enc: credentialsEnc,
-      credentials_iv: credentialsIv,
+      credentials_enc: encData,
+      credentials_iv: ivData,
     };
 
     const result = isEditing
@@ -90,6 +127,38 @@ export function AppForm({ app, userId }: AppFormProps) {
     toast.success(isEditing ? "App atualizado" : "App criado");
     router.push("/");
     router.refresh();
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (hasRawCredentials) {
+      const cached = getCachedMasterPassword();
+      if (cached) {
+        await doSubmit(cached);
+      } else {
+        // Need master password — show prompt
+        setShowMasterPrompt(true);
+      }
+    } else {
+      await doSubmit(null);
+    }
+  }
+
+  async function handleMasterPromptSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!promptMasterPassword) return;
+    setShowMasterPrompt(false);
+    await doSubmit(promptMasterPassword);
+    setPromptMasterPassword("");
+  }
+
+  function handleClearCredentials() {
+    setCredentialsEnc("");
+    setCredentialsIv("");
+    setCredUsername("");
+    setCredPassword("");
+    setCredNotes("");
   }
 
   return (
@@ -268,13 +337,14 @@ export function AppForm({ app, userId }: AppFormProps) {
 
           {/* Credentials */}
           <CredentialFields
-            encryptedData={credentialsEnc}
-            iv={credentialsIv}
-            userId={userId}
-            onEncrypted={(enc, iv) => {
-              setCredentialsEnc(enc);
-              setCredentialsIv(iv);
-            }}
+            hasEncrypted={!!credentialsEnc}
+            username={credUsername}
+            password={credPassword}
+            notes={credNotes}
+            onUsernameChange={setCredUsername}
+            onPasswordChange={setCredPassword}
+            onNotesChange={setCredNotes}
+            onClear={handleClearCredentials}
           />
 
           {/* Form errors */}
@@ -303,6 +373,57 @@ export function AppForm({ app, userId }: AppFormProps) {
           </div>
         </form>
       </main>
+
+      {/* Master password prompt overlay */}
+      {showMasterPrompt && (
+        <div
+          className="fixed inset-0 bg-bg/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowMasterPrompt(false);
+          }}
+        >
+          <div className="w-full max-w-sm bg-surface border border-border rounded-xl p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Lock className="w-4 h-4 text-accent" />
+              <h3 className="text-sm font-medium">Senha mestra</h3>
+            </div>
+            <p className="text-xs text-muted mb-4">
+              Defina uma senha mestra para criptografar suas credenciais. Ela
+              será lembrada durante esta sessão.
+            </p>
+            <form onSubmit={handleMasterPromptSubmit} className="space-y-3">
+              <input
+                type="password"
+                value={promptMasterPassword}
+                onChange={(e) => setPromptMasterPassword(e.target.value)}
+                autoFocus
+                required
+                className="w-full px-3 py-2.5 bg-bg border border-border rounded-lg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:border-accent transition-colors"
+                placeholder="Escolha uma senha mestra forte"
+              />
+              <p className="text-[10px] text-muted/60">
+                Se esquecê-la, as credenciais serão irrecuperáveis.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMasterPrompt(false)}
+                  className="flex-1 py-2.5 text-sm text-muted border border-border rounded-lg hover:text-primary transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!promptMasterPassword}
+                  className="flex-1 py-2.5 bg-accent text-bg text-sm font-medium rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
