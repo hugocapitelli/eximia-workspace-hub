@@ -23,7 +23,7 @@ export function CredentialReveal({
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState(CREDENTIAL_REVEAL_DURATION / 1000);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -193,72 +193,87 @@ export function CredentialReveal({
             </p>
 
             {credentials.username && (
-              <div className="flex items-center gap-2">
-                <div className="flex-1 min-w-0">
+              <div className="bg-bg rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1">
                   <p className="text-[10px] text-muted uppercase tracking-wider">
-                    Usuário
+                    Usuario
                   </p>
-                  <p className="text-sm font-mono truncate">
-                    {credentials.username}
-                  </p>
+                  <button
+                    onClick={() => handleCopy(credentials.username, "user")}
+                    className="flex items-center gap-1 text-[10px] text-muted hover:text-accent transition-colors"
+                    aria-label="Copiar usuario"
+                  >
+                    {copied === "user" ? (
+                      <><Check className="w-3 h-3 text-accent-alt" /> Copiado</>
+                    ) : (
+                      <><Copy className="w-3 h-3" /> Copiar</>
+                    )}
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleCopy(credentials.username, "user")}
-                  className="p-1.5 text-muted hover:text-accent transition-colors"
-                  aria-label="Copiar usuário"
-                >
-                  {copied === "user" ? (
-                    <Check className="w-3.5 h-3.5 text-accent-alt" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5" />
-                  )}
-                </button>
+                <p className="text-sm font-mono break-all select-all">
+                  {credentials.username}
+                </p>
               </div>
             )}
 
             {credentials.password && (
-              <div className="flex items-center gap-2">
-                <div className="flex-1 min-w-0">
+              <div className="bg-bg rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1">
                   <p className="text-[10px] text-muted uppercase tracking-wider">
                     Senha
                   </p>
-                  <p className="text-sm font-mono truncate">
-                    {showPassword
-                      ? credentials.password
-                      : "••••••••••"}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="flex items-center gap-1 text-[10px] text-muted hover:text-primary transition-colors"
+                      aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                    >
+                      {showPassword ? (
+                        <><EyeOff className="w-3 h-3" /> Ocultar</>
+                      ) : (
+                        <><Eye className="w-3 h-3" /> Mostrar</>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleCopy(credentials.password, "pass")}
+                      className="flex items-center gap-1 text-[10px] text-muted hover:text-accent transition-colors"
+                      aria-label="Copiar senha"
+                    >
+                      {copied === "pass" ? (
+                        <><Check className="w-3 h-3 text-accent-alt" /> Copiado</>
+                      ) : (
+                        <><Copy className="w-3 h-3" /> Copiar</>
+                      )}
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="p-1.5 text-muted hover:text-primary transition-colors"
-                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-3.5 h-3.5" />
-                  ) : (
-                    <Eye className="w-3.5 h-3.5" />
-                  )}
-                </button>
-                <button
-                  onClick={() => handleCopy(credentials.password, "pass")}
-                  className="p-1.5 text-muted hover:text-accent transition-colors"
-                  aria-label="Copiar senha"
-                >
-                  {copied === "pass" ? (
-                    <Check className="w-3.5 h-3.5 text-accent-alt" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5" />
-                  )}
-                </button>
+                <p className="text-sm font-mono break-all select-all">
+                  {showPassword
+                    ? credentials.password
+                    : "••••••••••••"}
+                </p>
               </div>
             )}
 
             {credentials.notes && (
-              <div>
-                <p className="text-[10px] text-muted uppercase tracking-wider">
-                  Notas
-                </p>
-                <p className="text-xs text-primary/80 mt-0.5 whitespace-pre-wrap">
+              <div className="bg-bg rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] text-muted uppercase tracking-wider">
+                    Notas
+                  </p>
+                  <button
+                    onClick={() => handleCopy(credentials.notes, "notes")}
+                    className="flex items-center gap-1 text-[10px] text-muted hover:text-accent transition-colors"
+                    aria-label="Copiar notas"
+                  >
+                    {copied === "notes" ? (
+                      <><Check className="w-3 h-3 text-accent-alt" /> Copiado</>
+                    ) : (
+                      <><Copy className="w-3 h-3" /> Copiar</>
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-primary/80 whitespace-pre-wrap select-all">
                   {credentials.notes}
                 </p>
               </div>
