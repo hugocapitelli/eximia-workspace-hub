@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Lock } from "lucide-react";
 import { encrypt } from "@/lib/crypto";
+import {
+  getCachedMasterPassword,
+  cacheMasterPassword,
+} from "@/lib/master-password-cache";
 
 interface CredentialFieldsProps {
   encryptedData: string;
@@ -25,12 +29,14 @@ export function CredentialFields({
   const [encrypted, setEncrypted] = useState(!!encryptedData);
 
   async function handleEncrypt() {
-    if (!masterPassword) return;
+    const effectiveMaster = masterPassword || getCachedMasterPassword() || "";
+    if (!effectiveMaster) return;
     if (!username && !password && !notes) return;
 
     const credentials = JSON.stringify({ username, password, notes });
-    const result = await encrypt(credentials, masterPassword, userId);
+    const result = await encrypt(credentials, effectiveMaster, userId);
     onEncrypted(result.ciphertext, result.iv);
+    cacheMasterPassword(effectiveMaster);
     setEncrypted(true);
     setUsername("");
     setPassword("");
@@ -132,34 +138,48 @@ export function CredentialFields({
               </div>
 
               <div className="pt-2 border-t border-border">
-                <label
-                  htmlFor="cred-master"
-                  className="block text-xs text-muted mb-1"
-                >
-                  Senha mestra (para criptografar)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    id="cred-master"
-                    type="password"
-                    value={masterPassword}
-                    onChange={(e) => setMasterPassword(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-bg border border-border rounded-lg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:border-accent transition-colors"
-                    placeholder="Sua senha mestra"
-                  />
+                {!getCachedMasterPassword() && (
+                  <>
+                    <label
+                      htmlFor="cred-master"
+                      className="block text-xs text-muted mb-1"
+                    >
+                      Senha mestra (para criptografar)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        id="cred-master"
+                        type="password"
+                        value={masterPassword}
+                        onChange={(e) => setMasterPassword(e.target.value)}
+                        className="flex-1 px-3 py-2 bg-bg border border-border rounded-lg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:border-accent transition-colors"
+                        placeholder="Sua senha mestra"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleEncrypt}
+                        disabled={!masterPassword || (!username && !password && !notes)}
+                        className="px-4 py-2 bg-accent/20 text-accent text-xs font-medium rounded-lg hover:bg-accent/30 transition-colors disabled:opacity-30"
+                      >
+                        Criptografar
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-muted/60 mt-1.5">
+                      A senha mestra nunca é armazenada. Se esquecê-la, as
+                      credenciais serão irrecuperáveis.
+                    </p>
+                  </>
+                )}
+                {getCachedMasterPassword() && (
                   <button
                     type="button"
                     onClick={handleEncrypt}
-                    disabled={!masterPassword || (!username && !password && !notes)}
-                    className="px-4 py-2 bg-accent/20 text-accent text-xs font-medium rounded-lg hover:bg-accent/30 transition-colors disabled:opacity-30"
+                    disabled={!username && !password && !notes}
+                    className="w-full px-4 py-2 bg-accent/20 text-accent text-xs font-medium rounded-lg hover:bg-accent/30 transition-colors disabled:opacity-30"
                   >
                     Criptografar
                   </button>
-                </div>
-                <p className="text-[10px] text-muted/60 mt-1.5">
-                  A senha mestra nunca é armazenada. Se esquecê-la, as
-                  credenciais serão irrecuperáveis.
-                </p>
+                )}
               </div>
             </>
           )}

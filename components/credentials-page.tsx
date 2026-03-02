@@ -36,6 +36,10 @@ import {
   saveEnrollment,
   deleteEnrollment,
 } from "@/lib/biometric-store";
+import {
+  getCachedMasterPassword,
+  cacheMasterPassword,
+} from "@/lib/master-password-cache";
 
 type PageState = "locked" | "unlocked" | "editing" | "adding";
 
@@ -97,6 +101,35 @@ export function CredentialsPage({ app, userId }: CredentialsPageProps) {
     check();
   }, [app.id, credEnc]);
 
+  // Auto-decrypt on mount if master password is cached
+  useEffect(() => {
+    if (!credEnc || !credIv) return;
+    const cached = getCachedMasterPassword();
+    if (!cached) return;
+
+    let cancelled = false;
+    setLoading(true);
+
+    decrypt(credEnc, credIv, cached, userId)
+      .then((plaintext) => {
+        if (cancelled) return;
+        const parsed = JSON.parse(plaintext) as Credentials;
+        setCredentials(parsed);
+        setMasterPassword(cached);
+        setState("unlocked");
+      })
+      .catch(() => {
+        // Cached password no longer valid — ignore silently
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+    // Run only on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auto-hide timer when unlocked
   useEffect(() => {
     if (state !== "unlocked") return;
@@ -142,6 +175,7 @@ export function CredentialsPage({ app, userId }: CredentialsPageProps) {
       const plaintext = await decrypt(credEnc, credIv, masterPassword, userId);
       const parsed = JSON.parse(plaintext) as Credentials;
       setCredentials(parsed);
+      cacheMasterPassword(masterPassword);
 
       if (biometricAvailable && !biometricEnrolled) {
         setShowEnrollBanner(true);
@@ -192,6 +226,7 @@ export function CredentialsPage({ app, userId }: CredentialsPageProps) {
       const parsed = JSON.parse(plaintext) as Credentials;
       setCredentials(parsed);
       setMasterPassword(storedMaster);
+      cacheMasterPassword(storedMaster);
       setState("unlocked");
     } catch {
       setError("Falha na descriptografia. A senha mestra pode ter mudado.");
@@ -246,7 +281,8 @@ export function CredentialsPage({ app, userId }: CredentialsPageProps) {
   // Save credentials (add or edit)
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!formMaster) return;
+    const effectiveMaster = formMaster || getCachedMasterPassword() || "";
+    if (!effectiveMaster) return;
     if (!formUsername && !formPassword && !formNotes) {
       toast.error("Preencha pelo menos um campo");
       return;
@@ -260,7 +296,7 @@ export function CredentialsPage({ app, userId }: CredentialsPageProps) {
         notes: formNotes,
       });
 
-      const result = await encrypt(credentialData, formMaster, userId);
+      const result = await encrypt(credentialData, effectiveMaster, userId);
 
       const updateResult = await updateAppCredentials(
         app.id,
@@ -277,15 +313,17 @@ export function CredentialsPage({ app, userId }: CredentialsPageProps) {
       setCredEnc(result.ciphertext);
       setCredIv(result.iv);
 
+      cacheMasterPassword(effectiveMaster);
+
       if (state === "adding" && biometricAvailable) {
-        setMasterPassword(formMaster);
+        setMasterPassword(effectiveMaster);
         setShowEnrollBanner(true);
       }
 
       if (state === "editing" && biometricEnrolled) {
         const enrollment = await getEnrollment(app.id);
         if (enrollment) {
-          await saveEnrollment(app.id, enrollment.credentialId, formMaster);
+          await saveEnrollment(app.id, enrollment.credentialId, effectiveMaster);
         }
       }
 
@@ -294,7 +332,7 @@ export function CredentialsPage({ app, userId }: CredentialsPageProps) {
         password: formPassword,
         notes: formNotes,
       });
-      setMasterPassword(formMaster);
+      setMasterPassword(effectiveMaster);
       setFormMaster("");
       setState("unlocked");
       toast.success(
@@ -766,27 +804,29 @@ export function CredentialsPage({ app, userId }: CredentialsPageProps) {
                 />
               </div>
 
-              <div className="pt-3 border-t border-border">
-                <label
-                  htmlFor="edit-master"
-                  className="block text-xs text-muted mb-1"
-                >
-                  Senha mestra (para re-criptografar)
-                </label>
-                <input
-                  id="edit-master"
-                  type="password"
-                  value={formMaster}
-                  onChange={(e) => setFormMaster(e.target.value)}
-                  required
-                  className="w-full px-3 py-2.5 bg-bg border border-border rounded-lg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:border-accent transition-colors"
-                  placeholder="Sua senha mestra"
-                />
-                <p className="text-[10px] text-muted/60 mt-1">
-                  A senha mestra nunca é armazenada. Se esquecê-la, as
-                  credenciais serão irrecuperáveis.
-                </p>
-              </div>
+              {!getCachedMasterPassword() && (
+                <div className="pt-3 border-t border-border">
+                  <label
+                    htmlFor="edit-master"
+                    className="block text-xs text-muted mb-1"
+                  >
+                    Senha mestra (para re-criptografar)
+                  </label>
+                  <input
+                    id="edit-master"
+                    type="password"
+                    value={formMaster}
+                    onChange={(e) => setFormMaster(e.target.value)}
+                    required
+                    className="w-full px-3 py-2.5 bg-bg border border-border rounded-lg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:border-accent transition-colors"
+                    placeholder="Sua senha mestra"
+                  />
+                  <p className="text-[10px] text-muted/60 mt-1">
+                    A senha mestra nunca é armazenada. Se esquecê-la, as
+                    credenciais serão irrecuperáveis.
+                  </p>
+                </div>
+              )}
 
               <div className="flex gap-2 pt-2">
                 <button
@@ -800,7 +840,7 @@ export function CredentialsPage({ app, userId }: CredentialsPageProps) {
                   type="submit"
                   disabled={
                     saving ||
-                    !formMaster ||
+                    (!formMaster && !getCachedMasterPassword()) ||
                     (!formUsername && !formPassword && !formNotes)
                   }
                   className="flex items-center gap-2 px-4 py-2.5 bg-accent text-bg text-sm font-medium rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
@@ -878,27 +918,29 @@ export function CredentialsPage({ app, userId }: CredentialsPageProps) {
                 />
               </div>
 
-              <div className="pt-3 border-t border-border">
-                <label
-                  htmlFor="add-master"
-                  className="block text-xs text-muted mb-1"
-                >
-                  Senha mestra (para criptografar)
-                </label>
-                <input
-                  id="add-master"
-                  type="password"
-                  value={formMaster}
-                  onChange={(e) => setFormMaster(e.target.value)}
-                  required
-                  className="w-full px-3 py-2.5 bg-bg border border-border rounded-lg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:border-accent transition-colors"
-                  placeholder="Escolha uma senha mestra forte"
-                />
-                <p className="text-[10px] text-muted/60 mt-1">
-                  A senha mestra nunca é armazenada. Se esquecê-la, as
-                  credenciais serão irrecuperáveis.
-                </p>
-              </div>
+              {!getCachedMasterPassword() && (
+                <div className="pt-3 border-t border-border">
+                  <label
+                    htmlFor="add-master"
+                    className="block text-xs text-muted mb-1"
+                  >
+                    Senha mestra (para criptografar)
+                  </label>
+                  <input
+                    id="add-master"
+                    type="password"
+                    value={formMaster}
+                    onChange={(e) => setFormMaster(e.target.value)}
+                    required
+                    className="w-full px-3 py-2.5 bg-bg border border-border rounded-lg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:border-accent transition-colors"
+                    placeholder="Escolha uma senha mestra forte"
+                  />
+                  <p className="text-[10px] text-muted/60 mt-1">
+                    A senha mestra nunca é armazenada. Se esquecê-la, as
+                    credenciais serão irrecuperáveis.
+                  </p>
+                </div>
+              )}
 
               <div className="flex gap-2 pt-2">
                 <Link
@@ -911,7 +953,7 @@ export function CredentialsPage({ app, userId }: CredentialsPageProps) {
                   type="submit"
                   disabled={
                     saving ||
-                    !formMaster ||
+                    (!formMaster && !getCachedMasterPassword()) ||
                     (!formUsername && !formPassword && !formNotes)
                   }
                   className="flex items-center gap-2 px-4 py-2.5 bg-accent text-bg text-sm font-medium rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
