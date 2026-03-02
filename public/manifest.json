@@ -1,0 +1,16 @@
+{
+  "name": "eximIA Workspace",
+  "short_name": "Workspace",
+  "description": "Portal centralizado para todos os sistemas eximIA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0A0A",
+  "theme_color": "#C4A882",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
