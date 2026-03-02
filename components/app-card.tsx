@@ -130,19 +130,23 @@ export function AppCard({ app }: AppCardProps) {
           />
         </button>
 
-        {app.credentials_enc && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (app.credentials_enc) {
               setShowCredentials(true);
-            }}
-            className="p-1 rounded hover:bg-surface transition-colors hover:text-accent"
-            title="Ver credenciais"
-            aria-label="Ver credenciais"
-          >
-            <KeyRound className="w-3.5 h-3.5" />
-          </button>
-        )}
+            } else {
+              router.push(`/apps/${app.id}/edit`);
+            }
+          }}
+          className={`p-1 rounded hover:bg-surface transition-colors hover:text-accent ${
+            app.credentials_enc ? "text-accent" : ""
+          }`}
+          title={app.credentials_enc ? "Ver credenciais" : "Adicionar credenciais"}
+          aria-label={app.credentials_enc ? "Ver credenciais" : "Adicionar credenciais"}
+        >
+          <KeyRound className="w-3.5 h-3.5" />
+        </button>
 
         <button
           onClick={handleShare}
