@@ -116,6 +116,31 @@ export async function updateApp(id: string, input: AppInput) {
   return { success: true };
 }
 
+export async function updateAppCredentials(
+  id: string,
+  credentialsEnc: string,
+  credentialsIv: string
+) {
+  if (!isValidUUID(id)) return { error: { _form: ["ID inválido"] } };
+
+  const { supabase, user } = await getAuthenticatedUser();
+
+  const { error } = await supabase
+    .from("apps")
+    .update({
+      credentials_enc: credentialsEnc || null,
+      credentials_iv: credentialsIv || null,
+    })
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) return { error: { _form: [error.message] } };
+
+  revalidatePath("/");
+  revalidatePath(`/apps/${id}/credentials`);
+  return { success: true };
+}
+
 export async function deleteApp(id: string) {
   if (!isValidUUID(id)) throw new Error("ID inválido");
   const { supabase, user } = await getAuthenticatedUser();

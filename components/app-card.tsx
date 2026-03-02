@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import type { App } from "@/types";
 import { deleteApp, toggleFavorite } from "@/app/actions";
 import { getFaviconUrl } from "@/lib/utils";
-import { CredentialReveal } from "@/components/credential-reveal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
 interface AppCardProps {
@@ -17,7 +16,6 @@ interface AppCardProps {
 
 export function AppCard({ app }: AppCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [showCredentials, setShowCredentials] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [faviconError, setFaviconError] = useState(false);
@@ -133,11 +131,7 @@ export function AppCard({ app }: AppCardProps) {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            if (app.credentials_enc) {
-              setShowCredentials(true);
-            } else {
-              router.push(`/apps/${app.id}/edit`);
-            }
+            router.push(`/apps/${app.id}/credentials`);
           }}
           className={`p-1 rounded hover:bg-surface transition-colors hover:text-accent ${
             app.credentials_enc ? "text-accent" : ""
@@ -234,15 +228,6 @@ export function AppCard({ app }: AppCardProps) {
         />
       )}
 
-      {/* Credential Reveal Modal */}
-      {showCredentials && app.credentials_enc && app.credentials_iv && (
-        <CredentialReveal
-          encryptedData={app.credentials_enc}
-          iv={app.credentials_iv}
-          userId={app.user_id}
-          onClose={() => setShowCredentials(false)}
-        />
-      )}
     </div>
   );
 }
